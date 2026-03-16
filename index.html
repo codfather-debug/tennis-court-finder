@@ -3,7 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Chicagoland Tennis Court Finder</title>
+<title>CourtFinder – Chicagoland Tennis Courts</title>
+<link rel="apple-touch-icon" sizes="180x180" href="icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="CourtFinder">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
@@ -126,6 +131,7 @@
   </div>
   <div class="header-right">
     <button class="btn-outline" id="labels-btn" onclick="toggleLabels()">🗺 Labels On</button>
+    <button class="btn-outline" onclick="exportSnapshot()" title="Download curated data to commit to GitHub">📥 Export Snapshot</button>
     <button class="btn-outline" onclick="refreshData()">↺ Refresh Data</button>
     <div class="status-msg" id="status-msg">Loading…</div>
   </div>
@@ -154,7 +160,7 @@
 </div>
 
 <div class="edit-banner" id="edit-banner">
-  ✏️ EDIT MODE — Click <strong>Delete</strong> to remove bad entries · Click <strong>Fix Courts</strong> to correct the count · Changes save automatically
+  ✏️ EDIT MODE — <strong>Delete</strong> bad entries · Fix court count · Toggle <strong>💡 Lit</strong> status · When done, click <strong>📥 Export Snapshot</strong> in the header to save for everyone
 </div>
 
 <div class="main" id="main-area">
@@ -190,13 +196,13 @@ let userLat = null, userLng = null, userMarker = null;
 let editMode = false;
 let labelsLayer = null, labelsOn = true;
 
-const CACHE_KEY   = 'chicagoland_tennis_courts_v2'; // bumped — fixes court counting
-const EDITS_KEY   = 'chicagoland_tennis_edits_v1';
+const CACHE_KEY   = 'chicagoland_tennis_courts_v2';
+const EDITS_KEY   = 'chicagoland_tennis_edits_v2'; // bumped — adds lit overrides
 
-// ─── Load/Save edits (deletions + court overrides) ─────────────────────────
+// ─── Load/Save edits (deletions + court overrides + lit overrides) ──────────
 function loadEdits() {
-  try { return JSON.parse(localStorage.getItem(EDITS_KEY)) || { deleted: [], courts: {} }; }
-  catch(e) { return { deleted: [], courts: {} }; }
+  try { return JSON.parse(localStorage.getItem(EDITS_KEY)) || { deleted: [], courts: {}, lit: {} }; }
+  catch(e) { return { deleted: [], courts: {}, lit: {} }; }
 }
 function saveEdits(edits) {
   localStorage.setItem(EDITS_KEY, JSON.stringify(edits));
@@ -311,13 +317,14 @@ function processElements(elements) {
   });
 }
 
-// ─── Apply saved edits (deletions + court count overrides) ────────────────────
+// ─── Apply saved edits (deletions + court count + lit overrides) ─────────────
 function applyEdits(courts) {
   const edits = loadEdits();
   return courts
     .filter(c => !edits.deleted.includes(c.key))
     .map(c => {
       if (edits.courts[c.key] !== undefined) c.courts = edits.courts[c.key];
+      if (edits.lit && edits.lit[c.key] !== undefined) c.lit = edits.lit[c.key];
       return c;
     });
 }
@@ -361,8 +368,31 @@ function updateDeletedCount() {
   document.getElementById('deleted-count').textContent = n ? `${n} removed` : '';
 }
 
+function toggleLit(key) {
+  const c = allCourts.find(x => x.key === key);
+  if (!c) return;
+  c.lit = !c.lit;
+  const edits = loadEdits();
+  if (!edits.lit) edits.lit = {};
+  edits.lit[key] = c.lit;
+  saveEdits(edits);
+  renderList();
+}
+
+function exportSnapshot() {
+  const data = JSON.stringify(allCourts, null, 2);
+  const blob = new Blob([data], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'courts-data.json';
+  a.click();
+  setTimeout(() => {
+    alert('courts-data.json downloaded!\n\nTo make your edits visible to everyone:\n1. Move courts-data.json into your tennis-court-finder folder\n2. Run: git add courts-data.json && git commit -m "Update court data" && git push\n3. Vercel will redeploy automatically — everyone sees your curated data.');
+  }, 300);
+}
+
 function undoAllEdits() {
-  if (!confirm('Restore all deleted locations and reset all court counts?')) return;
+  if (!confirm('Restore all deleted locations and reset all court counts and lighting?')) return;
   localStorage.removeItem(EDITS_KEY);
   location.reload();
 }
@@ -512,6 +542,9 @@ function renderList(useFiltered) {
       ${editMode ? `
         <div class="edit-actions" style="display:flex;">
           <button class="btn-del" onclick="event.stopPropagation();deleteCourt('${c.key}')">🗑 Delete</button>
+          <button class="btn-fix" onclick="event.stopPropagation();toggleLit('${c.key}')" style="background:${c.lit ? '#27ae60' : '#636e72'}">
+            ${c.lit ? '💡 Lit' : '💡 Not Lit'}
+          </button>
           <div style="display:flex;gap:3px;align-items:center;">
             <input class="court-count-input" id="fix-input-${safeKey}" type="number" min="1" max="50" value="${c.courts}" onclick="event.stopPropagation()" />
             <button class="btn-fix" onclick="event.stopPropagation();fixCourtCount('${c.key}')">✓</button>
@@ -577,27 +610,45 @@ function refreshData() {
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
+// Load order: 1) courts-data.json (curated, committed to repo — seen by everyone)
+//             2) localStorage cache (your browser's last fetch)
+//             3) Live Overpass API query
+async function loadCuratedData() {
+  try {
+    const r = await fetch('courts-data.json?t=' + Date.now());
+    if (!r.ok) return null;
+    return r.json();
+  } catch(e) { return null; }
+}
+
 (async () => {
   try {
     let raw;
-    const cached = loadFromCache();
-    if (cached) {
-      document.getElementById('load-sub').textContent = 'Loading from saved snapshot…';
-      raw = cached;
+    const curated = await loadCuratedData();
+    if (curated) {
+      document.getElementById('load-sub').textContent = 'Loading curated snapshot…';
+      raw = curated;
+      document.getElementById('status-msg').textContent = `${raw.length} locations (curated)`;
     } else {
-      const data = await fetchCourts();
-      document.getElementById('load-sub').textContent = `Processing ${data.elements.length} results…`;
-      raw = processElements(data.elements);
-      saveToCache(raw);
+      const cached = loadFromCache();
+      if (cached) {
+        document.getElementById('load-sub').textContent = 'Loading from saved snapshot…';
+        raw = cached;
+      } else {
+        const data = await fetchCourts();
+        document.getElementById('load-sub').textContent = `Processing ${data.elements.length} results…`;
+        raw = processElements(data.elements);
+        saveToCache(raw);
+      }
     }
 
-    // Apply manual edits (deletions + court count overrides) on top
+    // Apply manual edits (deletions + court count + lit overrides) on top
     allCourts = applyEdits(raw);
     filteredCourts = [...allCourts];
 
-    document.getElementById('status-msg').textContent = cached
-      ? `${allCourts.length} locations (snapshot)`
-      : `${allCourts.length} locations loaded & saved`;
+    if (!curated) {
+      document.getElementById('status-msg').textContent = `${allCourts.length} locations loaded`;
+    }
 
     updateDeletedCount();
     renderList();
