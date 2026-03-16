@@ -18,7 +18,8 @@
   .stat { text-align: center; }
   .stat .num { font-size: 1.4rem; font-weight: 800; color: #2ecc71; }
   .stat .lbl { font-size: 0.65rem; text-transform: uppercase; letter-spacing: .05em; color: #8a9bb0; }
-  .status-msg { margin-left: auto; font-size: 0.8rem; color: #8a9bb0; }
+  .header-right { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .status-msg { font-size: 0.8rem; color: #8a9bb0; }
 
   /* CONTROLS */
   .controls { background: #1a2635; padding: 10px 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; border-bottom: 1px solid #263040; z-index: 900; }
@@ -32,24 +33,27 @@
   .btn-blue:hover { background: #2471a3; }
   .btn-outline { background: transparent; color: #8a9bb0; border: 1px solid #2d4060; }
   .btn-outline:hover { border-color: #2ecc71; color: #2ecc71; }
+  .btn-edit { background: #e67e22; color: #fff; }
+  .btn-edit:hover { background: #ca6f1e; }
+  .btn-edit.active { background: #e74c3c; }
   .filters { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
   .filter-btn { padding: 6px 12px; border-radius: 20px; border: 1px solid #2d4060; background: transparent; color: #8a9bb0; font-size: 0.78rem; cursor: pointer; transition: all .15s; }
   .filter-btn.active { background: #2ecc71; border-color: #2ecc71; color: #0f1923; font-weight: 700; }
   select { padding: 8px 10px; border-radius: 6px; border: 1px solid #2d4060; background: #0f1923; color: #e8edf2; font-size: 0.82rem; outline: none; cursor: pointer; }
 
   /* LAYOUT */
-  .main { display: flex; flex: 1; overflow: hidden; }
+  .main { display: flex; flex: 1; overflow: hidden; position: relative; }
   #map { flex: 1; }
 
   /* SIDEBAR */
   .sidebar { width: 340px; background: #1a2635; overflow-y: auto; border-left: 1px solid #263040; display: flex; flex-direction: column; }
-  .sidebar-header { padding: 12px 16px; border-bottom: 1px solid #263040; font-size: 0.8rem; color: #8a9bb0; }
+  .sidebar-header { padding: 12px 16px; border-bottom: 1px solid #263040; font-size: 0.8rem; color: #8a9bb0; display: flex; justify-content: space-between; align-items: center; }
   .court-list { flex: 1; overflow-y: auto; }
-  .court-card { padding: 12px 16px; border-bottom: 1px solid #1f2e3d; cursor: pointer; transition: background .15s; }
+  .court-card { padding: 12px 16px; border-bottom: 1px solid #1f2e3d; cursor: pointer; transition: background .15s; position: relative; }
   .court-card:hover, .court-card.selected { background: #1f3044; }
-  .court-card .name { font-weight: 600; font-size: 0.88rem; margin-bottom: 4px; line-height: 1.3; }
+  .court-card .name { font-weight: 600; font-size: 0.88rem; margin-bottom: 4px; line-height: 1.3; padding-right: 60px; }
   .court-card .addr { font-size: 0.75rem; color: #8a9bb0; margin-bottom: 6px; }
-  .court-card .tags { display: flex; gap: 5px; flex-wrap: wrap; }
+  .court-card .tags { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
   .tag { padding: 2px 8px; border-radius: 10px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
   .tag-lit { background: #f39c12; color: #0f1923; }
   .tag-unlit { background: #2d4060; color: #8a9bb0; }
@@ -59,6 +63,16 @@
   .tag-courts { background: #2980b9; color: #fff; }
   .tag-nearest { background: #2ecc71; color: #0f1923; }
   .dist { font-size: 0.72rem; color: #2ecc71; font-weight: 700; margin-top: 4px; }
+
+  /* EDIT MODE */
+  .edit-actions { position: absolute; top: 10px; right: 10px; display: none; flex-direction: column; gap: 4px; }
+  .edit-mode .edit-actions { display: flex; }
+  .edit-mode .court-card { border-left: 3px solid #e67e22; }
+  .btn-del { padding: 3px 8px; font-size: 0.7rem; background: #e74c3c; color: #fff; border-radius: 4px; border: none; cursor: pointer; }
+  .btn-fix { padding: 3px 8px; font-size: 0.7rem; background: #e67e22; color: #fff; border-radius: 4px; border: none; cursor: pointer; }
+  .court-count-input { width: 50px; padding: 2px 6px; border-radius: 4px; border: 1px solid #2ecc71; background: #0f1923; color: #e8edf2; font-size: 0.8rem; text-align: center; }
+  .edit-banner { background: #7d3c00; color: #f39c12; text-align: center; font-size: 0.78rem; padding: 5px; display: none; }
+  .edit-mode-on .edit-banner { display: block; }
 
   /* DETAIL PANEL */
   .detail-panel { position: absolute; bottom: 0; left: 0; right: 0; max-height: 60%; background: #1a2635; border-top: 2px solid #2ecc71; padding: 16px 20px; overflow-y: auto; z-index: 1000; transform: translateY(100%); transition: transform .3s ease; }
@@ -104,10 +118,14 @@
     <div class="stat"><div class="num" id="stat-lit">—</div><div class="lbl">Lit Sites</div></div>
     <div class="stat"><div class="num" id="stat-indoor">—</div><div class="lbl">Indoor</div></div>
   </div>
-  <div class="status-msg" id="status-msg">Loading…</div>
+  <div class="header-right">
+    <button class="btn-outline" id="labels-btn" onclick="toggleLabels()">🗺 Labels On</button>
+    <button class="btn-outline" onclick="refreshData()">↺ Refresh Data</button>
+    <div class="status-msg" id="status-msg">Loading…</div>
+  </div>
 </header>
 
-<div class="controls">
+<div class="controls" id="controls-bar">
   <div class="search-group">
     <input type="text" id="search-input" placeholder="Search by name, address, or ZIP…" />
     <button class="btn-green" onclick="doTextSearch()">Search</button>
@@ -126,12 +144,20 @@
     <option value="courts">Sort: Most Courts</option>
     <option value="distance">Sort: Nearest</option>
   </select>
+  <button class="btn-edit" id="edit-btn" onclick="toggleEditMode()">✏️ Edit Mode</button>
 </div>
 
-<div class="main">
+<div class="edit-banner" id="edit-banner">
+  ✏️ EDIT MODE — Click <strong>Delete</strong> to remove bad entries · Click <strong>Fix Courts</strong> to correct the count · Changes save automatically
+</div>
+
+<div class="main" id="main-area">
   <div id="map"></div>
   <div class="sidebar">
-    <div class="sidebar-header" id="sidebar-header">Loading courts…</div>
+    <div class="sidebar-header">
+      <span id="sidebar-header">Loading courts…</span>
+      <span id="deleted-count" style="color:#e74c3c;font-size:0.75rem;"></span>
+    </div>
     <div class="court-list" id="court-list"></div>
   </div>
 </div>
@@ -155,13 +181,42 @@
 let map, allCourts = [], filteredCourts = [], markers = {};
 let activeFilters = new Set();
 let userLat = null, userLng = null, userMarker = null;
+let editMode = false;
+let labelsLayer = null, labelsOn = true;
+
+const CACHE_KEY   = 'chicagoland_tennis_courts_v2'; // bumped — fixes court counting
+const EDITS_KEY   = 'chicagoland_tennis_edits_v1';
+
+// ─── Load/Save edits (deletions + court overrides) ─────────────────────────
+function loadEdits() {
+  try { return JSON.parse(localStorage.getItem(EDITS_KEY)) || { deleted: [], courts: {} }; }
+  catch(e) { return { deleted: [], courts: {} }; }
+}
+function saveEdits(edits) {
+  localStorage.setItem(EDITS_KEY, JSON.stringify(edits));
+}
 
 // ─── Init Map ───────────────────────────────────────────────────────────────
 map = L.map('map').setView([41.85, -87.95], 10);
+
+// Satellite base layer
 L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
   attribution: 'Tiles © Esri — Source: Esri, USGS, NOAA',
   maxZoom: 19
 }).addTo(map);
+
+// Labels overlay (park names, streets, cities)
+labelsLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+  attribution: '',
+  maxZoom: 19,
+  opacity: 0.9
+}).addTo(map);
+
+function toggleLabels() {
+  labelsOn = !labelsOn;
+  labelsOn ? labelsLayer.addTo(map) : labelsLayer.remove();
+  document.getElementById('labels-btn').textContent = labelsOn ? '🗺 Labels On' : '🗺 Labels Off';
+}
 
 // ─── Marker icons ───────────────────────────────────────────────────────────
 function makeIcon(lit, indoor) {
@@ -170,26 +225,22 @@ function makeIcon(lit, indoor) {
     <path d="M11 0C4.925 0 0 4.925 0 11c0 7.333 11 17 11 17s11-9.667 11-17C22 4.925 17.075 0 11 0z" fill="${color}"/>
     <circle cx="11" cy="11" r="5" fill="white" opacity=".85"/>
   </svg>`;
-  return L.divIcon({
-    html: svg, className: '', iconSize: [22, 28], iconAnchor: [11, 28], popupAnchor: [0, -28]
-  });
+  return L.divIcon({ html: svg, className: '', iconSize: [22,28], iconAnchor: [11,28], popupAnchor: [0,-28] });
 }
 
 // ─── Fetch from Overpass ─────────────────────────────────────────────────────
 async function fetchCourts() {
-  // Bounding box: covers Chicago metro + western suburbs to DeKalb/Aurora
+  // Only fetch explicit tennis pitches — avoids sports centres that aren't courts
   const bbox = '41.45,-88.80,42.45,-87.50';
-  const query = `[out:json][timeout:60];
+  const query = `[out:json][timeout:90];
 (
   node["leisure"="pitch"]["sport"="tennis"](${bbox});
   way["leisure"="pitch"]["sport"="tennis"](${bbox});
   relation["leisure"="pitch"]["sport"="tennis"](${bbox});
-  node["leisure"="sports_centre"]["sport"="tennis"](${bbox});
-  way["leisure"="sports_centre"]["sport"="tennis"](${bbox});
 );
 out center tags;`;
 
-  document.getElementById('load-sub').textContent = 'Querying Overpass API (may take ~10s)…';
+  document.getElementById('load-sub').textContent = 'Querying Overpass API (may take ~15s)…';
   const resp = await fetch('https://overpass-api.de/api/interpreter', {
     method: 'POST',
     body: 'data=' + encodeURIComponent(query)
@@ -199,8 +250,10 @@ out center tags;`;
 }
 
 // ─── Process raw OSM elements ────────────────────────────────────────────────
+// Key fix: each individual court way = 1 court. Count how many cluster together.
+// Group radius ~220m (0.002 degrees) to catch all courts in the same facility.
 function processElements(elements) {
-  const grouped = {}; // group by ~location to merge adjacent courts
+  const grouped = {};
 
   elements.forEach(el => {
     let lat = el.lat, lng = el.lon;
@@ -211,34 +264,106 @@ function processElements(elements) {
     const name = t.name || t['name:en'] || '';
     const addr = [t['addr:street'], t['addr:city']].filter(Boolean).join(', ');
     const lit = (t.lit || '').toLowerCase() === 'yes';
-    const indoor = (t.indoor || '').toLowerCase() === 'yes' || (t.sport_facility || '').includes('indoor');
+    const indoor = (t.indoor || '').toLowerCase() === 'yes';
     const access = t.access || (t.fee === 'yes' ? 'private' : 'public');
     const surface = t.surface || '';
-    const courts = parseInt(t.courts || t['tennis:courts'] || '1', 10) || 1;
+    // Explicit courts tag on this element (e.g. a relation covering all courts)
+    const explicitCourts = parseInt(t.courts || t['tennis:courts'] || '0', 10) || 0;
 
-    // Round lat/lng to ~100m to cluster nearby entries
-    const key = `${Math.round(lat * 1000) / 1000},${Math.round(lng * 1000) / 1000}`;
+    // ~220m grouping radius
+    const key = `${Math.round(lat * 500) / 500},${Math.round(lng * 500) / 500}`;
 
     if (grouped[key]) {
       const g = grouped[key];
-      g.courts = Math.max(g.courts, courts);
+      g._elementCount++;
+      if (explicitCourts > g._explicitCourts) g._explicitCourts = explicitCourts;
       if (!g.name && name) g.name = name;
       if (!g.addr && addr) g.addr = addr;
       if (lit) g.lit = true;
       if (indoor) g.indoor = true;
       if (surface && !g.surface) g.surface = surface;
       if (access === 'private') g.access = 'private';
+      // Use average position for better marker placement
+      g.lat = (g.lat * (g._elementCount - 1) + lat) / g._elementCount;
+      g.lng = (g.lng * (g._elementCount - 1) + lng) / g._elementCount;
     } else {
-      grouped[key] = { lat, lng, name, addr, lit, indoor, access, surface, courts, key };
+      grouped[key] = {
+        lat, lng, name, addr, lit, indoor, access, surface,
+        _elementCount: 1,
+        _explicitCourts: explicitCourts,
+        key
+      };
     }
   });
 
-  return Object.values(grouped);
+  // Final pass: resolve court count = max(explicit tag, element count)
+  return Object.values(grouped).map(g => {
+    g.courts = Math.max(g._explicitCourts, g._elementCount);
+    delete g._elementCount;
+    delete g._explicitCourts;
+    return g;
+  });
+}
+
+// ─── Apply saved edits (deletions + court count overrides) ────────────────────
+function applyEdits(courts) {
+  const edits = loadEdits();
+  return courts
+    .filter(c => !edits.deleted.includes(c.key))
+    .map(c => {
+      if (edits.courts[c.key] !== undefined) c.courts = edits.courts[c.key];
+      return c;
+    });
+}
+
+// ─── Edit Mode ───────────────────────────────────────────────────────────────
+function toggleEditMode() {
+  editMode = !editMode;
+  document.getElementById('edit-btn').classList.toggle('active', editMode);
+  document.getElementById('edit-btn').textContent = editMode ? '✕ Exit Edit' : '✏️ Edit Mode';
+  document.getElementById('edit-banner').style.display = editMode ? 'block' : 'none';
+  document.getElementById('court-list').classList.toggle('edit-mode', editMode);
+  renderList();
+}
+
+function deleteCourt(key) {
+  const edits = loadEdits();
+  if (!edits.deleted.includes(key)) edits.deleted.push(key);
+  saveEdits(edits);
+  allCourts = allCourts.filter(c => c.key !== key);
+  closeDetail();
+  renderList();
+  updateDeletedCount();
+}
+
+function fixCourtCount(key) {
+  const inputEl = document.getElementById('fix-input-' + key.replace(/[^a-z0-9]/gi,'_'));
+  if (!inputEl) return;
+  const val = parseInt(inputEl.value, 10);
+  if (!val || val < 1 || val > 50) { alert('Enter a number between 1 and 50'); return; }
+  const edits = loadEdits();
+  edits.courts[key] = val;
+  saveEdits(edits);
+  const c = allCourts.find(x => x.key === key);
+  if (c) c.courts = val;
+  renderList();
+}
+
+function updateDeletedCount() {
+  const edits = loadEdits();
+  const n = edits.deleted.length;
+  document.getElementById('deleted-count').textContent = n ? `${n} removed` : '';
+}
+
+function undoAllEdits() {
+  if (!confirm('Restore all deleted locations and reset all court counts?')) return;
+  localStorage.removeItem(EDITS_KEY);
+  location.reload();
 }
 
 // ─── Distance helpers ─────────────────────────────────────────────────────────
 function haversine(lat1, lng1, lat2, lng2) {
-  const R = 3958.8; // miles
+  const R = 3958.8;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLng = (lng2 - lng1) * Math.PI / 180;
   const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
@@ -251,7 +376,7 @@ function updateDistances() {
   });
 }
 
-// ─── Geocode address → lat/lng via Nominatim ─────────────────────────────────
+// ─── Geocode ──────────────────────────────────────────────────────────────────
 async function geocodeAddress(q) {
   const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&countrycodes=us&limit=1`;
   const r = await fetch(url, { headers: { 'Accept-Language': 'en' } });
@@ -285,8 +410,6 @@ function setUserLocation(lat, lng, label) {
 async function doTextSearch() {
   const q = document.getElementById('search-input').value.trim();
   if (!q) { renderList(); return; }
-
-  // Try local name match first
   const lower = q.toLowerCase();
   const nameMatch = allCourts.filter(c =>
     (c.name && c.name.toLowerCase().includes(lower)) ||
@@ -298,8 +421,6 @@ async function doTextSearch() {
     if (nameMatch.length === 1) openDetail(nameMatch[0]);
     return;
   }
-
-  // Otherwise geocode and find nearest
   document.getElementById('status-msg').textContent = 'Geocoding address…';
   try {
     const { lat, lng } = await geocodeAddress(q);
@@ -349,7 +470,6 @@ function renderList(useFiltered) {
     return (a.name || 'ZZZZ').localeCompare(b.name || 'ZZZZ');
   });
 
-  // Update stats
   document.getElementById('stat-locations').textContent = courts.length;
   document.getElementById('stat-courts').textContent = courts.reduce((s, c) => s + c.courts, 0);
   document.getElementById('stat-lit').textContent = courts.filter(c => c.lit).length;
@@ -357,22 +477,22 @@ function renderList(useFiltered) {
   document.getElementById('sidebar-header').textContent =
     courts.length === allCourts.length ? `${courts.length} locations found` : `${courts.length} of ${allCourts.length} locations`;
 
-  // Markers
   Object.values(markers).forEach(m => m.remove());
   markers = {};
-  sorted.forEach((c, i) => {
+  sorted.forEach(c => {
     const m = L.marker([c.lat, c.lng], { icon: makeIcon(c.lit, c.indoor) })
       .addTo(map)
       .on('click', () => { openDetail(c); highlightCard(c.key); });
     markers[c.key] = m;
   });
 
-  // List
   const list = document.getElementById('court-list');
   if (!sorted.length) { list.innerHTML = '<div class="no-results">No courts match your filters</div>'; return; }
 
-  list.innerHTML = sorted.map((c, i) => `
-    <div class="court-card" id="card-${c.key.replace(/[^a-z0-9]/gi,'_')}" onclick="cardClick('${c.key}')">
+  list.innerHTML = sorted.map((c, i) => {
+    const safeKey = c.key.replace(/[^a-z0-9]/gi,'_');
+    return `
+    <div class="court-card ${editMode ? 'edit-mode' : ''}" id="card-${safeKey}" onclick="cardClick('${c.key}')">
       <div class="name">${c.name || 'Tennis Courts'}</div>
       <div class="addr">${c.addr || formatCoords(c.lat, c.lng)}</div>
       <div class="tags">
@@ -383,8 +503,25 @@ function renderList(useFiltered) {
         ${c.access === 'private' ? '<span class="tag tag-private">Private</span>' : '<span class="tag tag-public">Public</span>'}
       </div>
       ${c.dist != null ? `<div class="dist">📍 ${c.dist.toFixed(1)} mi away</div>` : ''}
-    </div>
-  `).join('');
+      ${editMode ? `
+        <div class="edit-actions" style="display:flex;">
+          <button class="btn-del" onclick="event.stopPropagation();deleteCourt('${c.key}')">🗑 Delete</button>
+          <div style="display:flex;gap:3px;align-items:center;">
+            <input class="court-count-input" id="fix-input-${safeKey}" type="number" min="1" max="50" value="${c.courts}" onclick="event.stopPropagation()" />
+            <button class="btn-fix" onclick="event.stopPropagation();fixCourtCount('${c.key}')">✓</button>
+          </div>
+        </div>
+      ` : ''}
+    </div>`;
+  }).join('');
+
+  if (editMode) {
+    const edits = loadEdits();
+    const undoBtn = edits.deleted.length || Object.keys(edits.courts).length
+      ? `<div style="padding:8px 16px;border-top:1px solid #263040;"><button class="btn-outline" style="width:100%;font-size:0.75rem;" onclick="undoAllEdits()">↺ Undo All Edits (${edits.deleted.length} deleted, ${Object.keys(edits.courts).length} fixed)</button></div>`
+      : '';
+    list.insertAdjacentHTML('afterend', undoBtn);
+  }
 }
 
 function cardClick(key) {
@@ -394,8 +531,7 @@ function cardClick(key) {
 
 function highlightCard(key) {
   document.querySelectorAll('.court-card').forEach(el => el.classList.remove('selected'));
-  const id = 'card-' + key.replace(/[^a-z0-9]/gi,'_');
-  const el = document.getElementById(id);
+  const el = document.getElementById('card-' + key.replace(/[^a-z0-9]/gi,'_'));
   if (el) { el.classList.add('selected'); el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
 }
 
@@ -412,18 +548,10 @@ function openDetail(c) {
 }
 
 function closeDetail() { document.getElementById('detail-panel').classList.remove('open'); }
-
 function formatCoords(lat, lng) { return `${lat.toFixed(4)}, ${lng.toFixed(4)}`; }
 function capitalize(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
 
-function refreshData() {
-  localStorage.removeItem(CACHE_KEY);
-  location.reload();
-}
-
-// ─── Boot ─────────────────────────────────────────────────────────────────────
-const CACHE_KEY = 'chicagoland_tennis_courts_v1';
-
+// ─── Cache ────────────────────────────────────────────────────────────────────
 function loadFromCache() {
   try {
     const cached = localStorage.getItem(CACHE_KEY);
@@ -436,30 +564,36 @@ function saveToCache(courts) {
   try { localStorage.setItem(CACHE_KEY, JSON.stringify(courts)); } catch(e) {}
 }
 
+function refreshData() {
+  if (!confirm('Re-fetch live data from OpenStreetMap? Your manual edits (deletions, court count fixes) will be kept.')) return;
+  localStorage.removeItem(CACHE_KEY);
+  location.reload();
+}
+
+// ─── Boot ─────────────────────────────────────────────────────────────────────
 (async () => {
   try {
-    // Try cache first — loads instantly on repeat visits
+    let raw;
     const cached = loadFromCache();
     if (cached) {
       document.getElementById('load-sub').textContent = 'Loading from saved snapshot…';
-      allCourts = cached;
-      filteredCourts = [...allCourts];
-      document.getElementById('status-msg').textContent = `${allCourts.length} locations (cached) · <a href="#" onclick="refreshData()" style="color:#2ecc71">Refresh</a>`;
+      raw = cached;
     } else {
       const data = await fetchCourts();
       document.getElementById('load-sub').textContent = `Processing ${data.elements.length} results…`;
-      allCourts = processElements(data.elements);
-      filteredCourts = [...allCourts];
-      saveToCache(allCourts);
-      document.getElementById('status-msg').textContent = `${allCourts.length} locations loaded & saved`;
+      raw = processElements(data.elements);
+      saveToCache(raw);
     }
 
-    // Global stats (full dataset)
-    document.getElementById('stat-locations').textContent = allCourts.length;
-    document.getElementById('stat-courts').textContent = allCourts.reduce((s, c) => s + c.courts, 0);
-    document.getElementById('stat-lit').textContent = allCourts.filter(c => c.lit).length;
-    document.getElementById('stat-indoor').textContent = allCourts.filter(c => c.indoor).length;
+    // Apply manual edits (deletions + court count overrides) on top
+    allCourts = applyEdits(raw);
+    filteredCourts = [...allCourts];
 
+    document.getElementById('status-msg').textContent = cached
+      ? `${allCourts.length} locations (snapshot)`
+      : `${allCourts.length} locations loaded & saved`;
+
+    updateDeletedCount();
     renderList();
     document.getElementById('loading').style.display = 'none';
   } catch (e) {
