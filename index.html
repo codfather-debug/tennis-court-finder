@@ -69,6 +69,18 @@
   .tag-nearest { background: #2ecc71; color: #0f1923; }
   .dist { font-size: 0.72rem; color: #2ecc71; font-weight: 700; margin-top: 4px; }
 
+  /* FAVORITES */
+  .btn-star { position: absolute; top: 10px; right: 10px; background: none; border: none; font-size: 1.1rem; cursor: pointer; padding: 2px; line-height: 1; }
+  .tag-fav { background: #f1c40f; color: #0f1923; }
+  .tag-surface { background: #16a085; color: #fff; }
+
+  /* DETAIL ACTIONS */
+  .detail-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+  .btn-action { padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-size: 0.82rem; font-weight: 600; text-decoration: none; display: inline-block; text-align: center; }
+  .btn-directions { background: #2980b9; color: #fff; }
+  .btn-streetview { background: #27ae60; color: #fff; }
+  .btn-fav-detail { background: #f1c40f; color: #0f1923; }
+
   /* EDIT MODE */
   .edit-actions { position: absolute; top: 10px; right: 10px; display: none; flex-direction: column; gap: 4px; }
   .edit-mode .edit-actions { display: flex; }
@@ -149,7 +161,21 @@
     <button class="filter-btn" data-filter="private" onclick="toggleFilter('private')">Private</button>
     <button class="filter-btn" data-filter="indoor" onclick="toggleFilter('indoor')">Indoor</button>
     <button class="filter-btn" data-filter="outdoor" onclick="toggleFilter('outdoor')">Outdoor</button>
+    <button class="filter-btn" data-filter="hard" onclick="toggleFilter('hard')">Hard</button>
+    <button class="filter-btn" data-filter="clay" onclick="toggleFilter('clay')">Clay</button>
+    <button class="filter-btn" data-filter="grass" onclick="toggleFilter('grass')">Grass</button>
+    <button class="filter-btn" data-filter="favorites" onclick="toggleFilter('favorites')">⭐ Favorites</button>
     <button class="btn-outline" onclick="clearAll()">Clear</button>
+  </div>
+  <div id="radius-wrap" style="display:none;align-items:center;gap:6px;">
+    <span style="font-size:0.78rem;color:#8a9bb0;">Radius:</span>
+    <select id="radius-select" onchange="renderList()">
+      <option value="">Any</option>
+      <option value="5">5 mi</option>
+      <option value="10">10 mi</option>
+      <option value="25">25 mi</option>
+      <option value="50">50 mi</option>
+    </select>
   </div>
   <select id="sort-select" onchange="renderList()">
     <option value="name">Sort: A–Z</option>
@@ -186,6 +212,11 @@
     <div class="detail-item"><div class="di-label">Indoor</div><div class="di-value" id="dp-indoor">—</div></div>
     <div class="detail-item"><div class="di-label">Distance</div><div class="di-value" id="dp-dist">—</div></div>
   </div>
+  <div class="detail-actions">
+    <a id="dp-directions" class="btn-action btn-directions" href="#" target="_blank">🗺 Get Directions</a>
+    <a id="dp-streetview" class="btn-action btn-streetview" href="#" target="_blank">📷 Street View</a>
+    <button id="dp-fav" class="btn-action btn-fav-detail" onclick="toggleFavFromDetail()">⭐ Save Favorite</button>
+  </div>
 </div>
 
 <script>
@@ -197,7 +228,43 @@ let editMode = false;
 let labelsLayer = null, labelsOn = true;
 
 const CACHE_KEY   = 'chicagoland_tennis_courts_v2';
-const EDITS_KEY   = 'chicagoland_tennis_edits_v2'; // bumped — adds lit overrides
+const EDITS_KEY   = 'chicagoland_tennis_edits_v2';
+const FAVS_KEY    = 'chicagoland_tennis_favs_v1';
+
+// ─── Surface normalization ────────────────────────────────────────────────────
+function normalizeSurface(s) {
+  if (!s) return '';
+  const l = s.toLowerCase();
+  if (/clay|dirt|red/.test(l)) return 'clay';
+  if (/grass|turf/.test(l)) return 'grass';
+  if (/asphalt|concrete|hard|tarmac|macadam|acrylic/.test(l)) return 'hard';
+  return l;
+}
+
+// ─── Favorites ────────────────────────────────────────────────────────────────
+function loadFavs() {
+  try { return new Set(JSON.parse(localStorage.getItem(FAVS_KEY)) || []); }
+  catch(e) { return new Set(); }
+}
+function saveFavs(favs) {
+  localStorage.setItem(FAVS_KEY, JSON.stringify([...favs]));
+}
+function isFav(key) { return loadFavs().has(key); }
+function toggleFav(key) {
+  const favs = loadFavs();
+  favs.has(key) ? favs.delete(key) : favs.add(key);
+  saveFavs(favs);
+  renderList();
+  // refresh detail panel fav button if open
+  const c = allCourts.find(x => x.key === key);
+  if (c && document.getElementById('detail-panel').classList.contains('open')) updateDetailFav(key);
+}
+let currentDetailKey = null;
+function toggleFavFromDetail() { if (currentDetailKey) toggleFav(currentDetailKey); }
+function updateDetailFav(key) {
+  const btn = document.getElementById('dp-fav');
+  if (btn) btn.textContent = isFav(key) ? '⭐ Saved!' : '⭐ Save Favorite';
+}
 
 // ─── Load/Save edits (deletions + court overrides + lit overrides) ──────────
 function loadEdits() {
@@ -438,6 +505,7 @@ function setUserLocation(lat, lng, label) {
   map.setView([lat, lng], 12);
   updateDistances();
   document.getElementById('sort-select').value = 'distance';
+  document.getElementById('radius-wrap').style.display = 'flex';
   renderList();
   document.getElementById('status-msg').textContent = `Sorted by distance from ${label}`;
 }
@@ -484,12 +552,20 @@ function clearAll() {
 }
 
 function applyFilters() {
+  const radiusVal = parseFloat(document.getElementById('radius-select')?.value || '');
+  const favs = loadFavs();
   return allCourts.filter(c => {
     if (activeFilters.has('lit') && !c.lit) return false;
     if (activeFilters.has('public') && c.access === 'private') return false;
     if (activeFilters.has('private') && c.access !== 'private') return false;
     if (activeFilters.has('indoor') && !c.indoor) return false;
     if (activeFilters.has('outdoor') && c.indoor) return false;
+    if (activeFilters.has('favorites') && !favs.has(c.key)) return false;
+    const surf = normalizeSurface(c.surface);
+    if (activeFilters.has('hard') && surf !== 'hard') return false;
+    if (activeFilters.has('clay') && surf !== 'clay') return false;
+    if (activeFilters.has('grass') && surf !== 'grass') return false;
+    if (radiusVal && c.dist != null && c.dist > radiusVal) return false;
     return true;
   });
 }
@@ -525,10 +601,14 @@ function renderList(useFiltered) {
   const list = document.getElementById('court-list');
   if (!sorted.length) { list.innerHTML = '<div class="no-results">No courts match your filters</div>'; return; }
 
+  const favs = loadFavs();
   list.innerHTML = sorted.map((c, i) => {
     const safeKey = c.key.replace(/[^a-z0-9]/gi,'_');
+    const surf = normalizeSurface(c.surface);
+    const surfLabel = surf === 'hard' ? '🔵 Hard' : surf === 'clay' ? '🟤 Clay' : surf === 'grass' ? '🌿 Grass' : '';
     return `
     <div class="court-card ${editMode ? 'edit-mode' : ''}" id="card-${safeKey}" onclick="cardClick('${c.key}')">
+      ${!editMode ? `<button class="btn-star" onclick="event.stopPropagation();toggleFav('${c.key}')" title="Favorite">${favs.has(c.key) ? '⭐' : '☆'}</button>` : ''}
       <div class="name">${c.name || 'Tennis Courts'}</div>
       <div class="addr">${c.addr || formatCoords(c.lat, c.lng)}</div>
       <div class="tags">
@@ -537,6 +617,7 @@ function renderList(useFiltered) {
         ${c.lit ? '<span class="tag tag-lit">🟢 Lit</span>' : '<span class="tag tag-unlit">❌ No lights</span>'}
         ${c.indoor ? '<span class="tag tag-indoor">🏠 Indoor</span>' : ''}
         ${c.access === 'private' ? '<span class="tag tag-private">Private</span>' : '<span class="tag tag-public">Public</span>'}
+        ${surfLabel ? `<span class="tag tag-surface">${surfLabel}</span>` : ''}
       </div>
       ${c.dist != null ? `<div class="dist">📍 ${c.dist.toFixed(1)} mi away</div>` : ''}
       ${editMode ? `
@@ -575,14 +656,22 @@ function highlightCard(key) {
 }
 
 function openDetail(c) {
+  currentDetailKey = c.key;
   document.getElementById('dp-name').textContent = c.name || 'Tennis Courts';
   document.getElementById('dp-addr').textContent = c.addr || formatCoords(c.lat, c.lng);
   document.getElementById('dp-courts').textContent = c.courts;
   document.getElementById('dp-lit').textContent = c.lit ? '🟢 Yes' : '❌ No';
   document.getElementById('dp-access').textContent = c.access === 'private' ? 'Private' : 'Public';
-  document.getElementById('dp-surface').textContent = c.surface ? capitalize(c.surface) : 'Unknown';
+  const surf = normalizeSurface(c.surface);
+  document.getElementById('dp-surface').textContent = surf ? capitalize(surf) : 'Unknown';
   document.getElementById('dp-indoor').textContent = c.indoor ? 'Indoor' : 'Outdoor';
   document.getElementById('dp-dist').textContent = c.dist != null ? c.dist.toFixed(1) + ' mi' : '—';
+  // Action buttons
+  document.getElementById('dp-directions').href =
+    `https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}`;
+  document.getElementById('dp-streetview').href =
+    `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${c.lat},${c.lng}`;
+  updateDetailFav(c.key);
   document.getElementById('detail-panel').classList.add('open');
 }
 
