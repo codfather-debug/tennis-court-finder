@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chicagoland Tennis Court Finder</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1923; color: #e8edf2; height: 100vh; display: flex; flex-direction: column; }
+
+  /* HEADER */
+  header { background: #1a2635; border-bottom: 2px solid #2ecc71; padding: 12px 20px; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; z-index: 1000; }
+  header h1 { font-size: 1.3rem; font-weight: 700; color: #2ecc71; white-space: nowrap; }
+  header h1 span { color: #e8edf2; }
+  .stats-bar { display: flex; gap: 16px; flex-wrap: wrap; }
+  .stat { text-align: center; }
+  .stat .num { font-size: 1.4rem; font-weight: 800; color: #2ecc71; }
+  .stat .lbl { font-size: 0.65rem; text-transform: uppercase; letter-spacing: .05em; color: #8a9bb0; }
+  .status-msg { margin-left: auto; font-size: 0.8rem; color: #8a9bb0; }
+
+  /* CONTROLS */
+  .controls { background: #1a2635; padding: 10px 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; border-bottom: 1px solid #263040; z-index: 900; }
+  .search-group { display: flex; gap: 6px; flex: 1; min-width: 260px; }
+  .search-group input { flex: 1; padding: 8px 12px; border-radius: 6px; border: 1px solid #2d4060; background: #0f1923; color: #e8edf2; font-size: 0.85rem; outline: none; }
+  .search-group input:focus { border-color: #2ecc71; }
+  button { padding: 8px 14px; border-radius: 6px; border: none; cursor: pointer; font-size: 0.82rem; font-weight: 600; transition: all .15s; }
+  .btn-green { background: #2ecc71; color: #0f1923; }
+  .btn-green:hover { background: #27ae60; }
+  .btn-blue { background: #2980b9; color: #fff; }
+  .btn-blue:hover { background: #2471a3; }
+  .btn-outline { background: transparent; color: #8a9bb0; border: 1px solid #2d4060; }
+  .btn-outline:hover { border-color: #2ecc71; color: #2ecc71; }
+  .filters { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .filter-btn { padding: 6px 12px; border-radius: 20px; border: 1px solid #2d4060; background: transparent; color: #8a9bb0; font-size: 0.78rem; cursor: pointer; transition: all .15s; }
+  .filter-btn.active { background: #2ecc71; border-color: #2ecc71; color: #0f1923; font-weight: 700; }
+  select { padding: 8px 10px; border-radius: 6px; border: 1px solid #2d4060; background: #0f1923; color: #e8edf2; font-size: 0.82rem; outline: none; cursor: pointer; }
+
+  /* LAYOUT */
+  .main { display: flex; flex: 1; overflow: hidden; }
+  #map { flex: 1; }
+
+  /* SIDEBAR */
+  .sidebar { width: 340px; background: #1a2635; overflow-y: auto; border-left: 1px solid #263040; display: flex; flex-direction: column; }
+  .sidebar-header { padding: 12px 16px; border-bottom: 1px solid #263040; font-size: 0.8rem; color: #8a9bb0; }
+  .court-list { flex: 1; overflow-y: auto; }
+  .court-card { padding: 12px 16px; border-bottom: 1px solid #1f2e3d; cursor: pointer; transition: background .15s; }
+  .court-card:hover, .court-card.selected { background: #1f3044; }
+  .court-card .name { font-weight: 600; font-size: 0.88rem; margin-bottom: 4px; line-height: 1.3; }
+  .court-card .addr { font-size: 0.75rem; color: #8a9bb0; margin-bottom: 6px; }
+  .court-card .tags { display: flex; gap: 5px; flex-wrap: wrap; }
+  .tag { padding: 2px 8px; border-radius: 10px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+  .tag-lit { background: #f39c12; color: #0f1923; }
+  .tag-unlit { background: #2d4060; color: #8a9bb0; }
+  .tag-indoor { background: #8e44ad; color: #fff; }
+  .tag-public { background: #1abc9c; color: #0f1923; }
+  .tag-private { background: #e74c3c; color: #fff; }
+  .tag-courts { background: #2980b9; color: #fff; }
+  .tag-nearest { background: #2ecc71; color: #0f1923; }
+  .dist { font-size: 0.72rem; color: #2ecc71; font-weight: 700; margin-top: 4px; }
+
+  /* DETAIL PANEL */
+  .detail-panel { position: absolute; bottom: 0; left: 0; right: 0; max-height: 60%; background: #1a2635; border-top: 2px solid #2ecc71; padding: 16px 20px; overflow-y: auto; z-index: 1000; transform: translateY(100%); transition: transform .3s ease; }
+  .detail-panel.open { transform: translateY(0); }
+  .detail-panel h2 { font-size: 1rem; margin-bottom: 4px; }
+  .detail-panel .detail-addr { color: #8a9bb0; font-size: 0.82rem; margin-bottom: 10px; }
+  .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+  .detail-item { background: #0f1923; border-radius: 8px; padding: 10px 14px; }
+  .detail-item .di-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: .06em; color: #8a9bb0; margin-bottom: 4px; }
+  .detail-item .di-value { font-size: 1rem; font-weight: 700; color: #2ecc71; }
+  .close-btn { position: absolute; top: 12px; right: 16px; background: none; border: none; color: #8a9bb0; font-size: 1.2rem; cursor: pointer; }
+  .close-btn:hover { color: #e8edf2; }
+
+  /* LOADING */
+  .loading-overlay { position: fixed; inset: 0; background: rgba(15,25,35,.9); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; }
+  .spinner { width: 50px; height: 50px; border: 4px solid #2d4060; border-top-color: #2ecc71; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 16px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { color: #e8edf2; font-size: 1rem; }
+  .loading-sub { color: #8a9bb0; font-size: 0.8rem; margin-top: 6px; }
+
+  .no-results { padding: 30px 16px; text-align: center; color: #8a9bb0; font-size: 0.85rem; }
+
+  @media (max-width: 700px) {
+    .sidebar { width: 100%; max-height: 45vh; }
+    .main { flex-direction: column-reverse; }
+    #map { min-height: 55vw; }
+  }
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loading">
+  <div class="spinner"></div>
+  <div class="loading-text">Fetching tennis courts…</div>
+  <div class="loading-sub" id="load-sub">Querying OpenStreetMap for Chicagoland area</div>
+</div>
+
+<header>
+  <h1>🎾 <span>Chicagoland</span> Tennis Courts</h1>
+  <div class="stats-bar">
+    <div class="stat"><div class="num" id="stat-locations">—</div><div class="lbl">Locations</div></div>
+    <div class="stat"><div class="num" id="stat-courts">—</div><div class="lbl">Total Courts</div></div>
+    <div class="stat"><div class="num" id="stat-lit">—</div><div class="lbl">Lit Sites</div></div>
+    <div class="stat"><div class="num" id="stat-indoor">—</div><div class="lbl">Indoor</div></div>
+  </div>
+  <div class="status-msg" id="status-msg">Loading…</div>
+</header>
+
+<div class="controls">
+  <div class="search-group">
+    <input type="text" id="search-input" placeholder="Search by name, address, or ZIP…" />
+    <button class="btn-green" onclick="doTextSearch()">Search</button>
+    <button class="btn-blue" onclick="useGPS()">📍 Near Me</button>
+  </div>
+  <div class="filters">
+    <button class="filter-btn" data-filter="lit" onclick="toggleFilter('lit')">💡 Lit</button>
+    <button class="filter-btn" data-filter="public" onclick="toggleFilter('public')">Public</button>
+    <button class="filter-btn" data-filter="private" onclick="toggleFilter('private')">Private</button>
+    <button class="filter-btn" data-filter="indoor" onclick="toggleFilter('indoor')">Indoor</button>
+    <button class="filter-btn" data-filter="outdoor" onclick="toggleFilter('outdoor')">Outdoor</button>
+    <button class="btn-outline" onclick="clearAll()">Clear</button>
+  </div>
+  <select id="sort-select" onchange="renderList()">
+    <option value="name">Sort: A–Z</option>
+    <option value="courts">Sort: Most Courts</option>
+    <option value="distance">Sort: Nearest</option>
+  </select>
+</div>
+
+<div class="main">
+  <div id="map"></div>
+  <div class="sidebar">
+    <div class="sidebar-header" id="sidebar-header">Loading courts…</div>
+    <div class="court-list" id="court-list"></div>
+  </div>
+</div>
+
+<div class="detail-panel" id="detail-panel">
+  <button class="close-btn" onclick="closeDetail()">✕</button>
+  <h2 id="dp-name"></h2>
+  <div class="detail-addr" id="dp-addr"></div>
+  <div class="detail-grid">
+    <div class="detail-item"><div class="di-label">Courts</div><div class="di-value" id="dp-courts">—</div></div>
+    <div class="detail-item"><div class="di-label">Lighting</div><div class="di-value" id="dp-lit">—</div></div>
+    <div class="detail-item"><div class="di-label">Access</div><div class="di-value" id="dp-access">—</div></div>
+    <div class="detail-item"><div class="di-label">Surface</div><div class="di-value" id="dp-surface">—</div></div>
+    <div class="detail-item"><div class="di-label">Indoor</div><div class="di-value" id="dp-indoor">—</div></div>
+    <div class="detail-item"><div class="di-label">Distance</div><div class="di-value" id="dp-dist">—</div></div>
+  </div>
+</div>
+
+<script>
+// ─── Globals ───────────────────────────────────────────────────────────────
+let map, allCourts = [], filteredCourts = [], markers = {};
+let activeFilters = new Set();
+let userLat = null, userLng = null, userMarker = null;
+
+// ─── Init Map ───────────────────────────────────────────────────────────────
+map = L.map('map').setView([41.85, -87.95], 10);
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  attribution: 'Tiles © Esri — Source: Esri, USGS, NOAA',
+  maxZoom: 19
+}).addTo(map);
+
+// ─── Marker icons ───────────────────────────────────────────────────────────
+function makeIcon(lit, indoor) {
+  const color = indoor ? '#8e44ad' : lit ? '#f39c12' : '#2ecc71';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="28" viewBox="0 0 22 28">
+    <path d="M11 0C4.925 0 0 4.925 0 11c0 7.333 11 17 11 17s11-9.667 11-17C22 4.925 17.075 0 11 0z" fill="${color}"/>
+    <circle cx="11" cy="11" r="5" fill="white" opacity=".85"/>
+  </svg>`;
+  return L.divIcon({
+    html: svg, className: '', iconSize: [22, 28], iconAnchor: [11, 28], popupAnchor: [0, -28]
+  });
+}
+
+// ─── Fetch from Overpass ─────────────────────────────────────────────────────
+async function fetchCourts() {
+  // Bounding box: covers Chicago metro + western suburbs to DeKalb/Aurora
+  const bbox = '41.45,-88.80,42.45,-87.50';
+  const query = `[out:json][timeout:60];
+(
+  node["leisure"="pitch"]["sport"="tennis"](${bbox});
+  way["leisure"="pitch"]["sport"="tennis"](${bbox});
+  relation["leisure"="pitch"]["sport"="tennis"](${bbox});
+  node["leisure"="sports_centre"]["sport"="tennis"](${bbox});
+  way["leisure"="sports_centre"]["sport"="tennis"](${bbox});
+);
+out center tags;`;
+
+  document.getElementById('load-sub').textContent = 'Querying Overpass API (may take ~10s)…';
+  const resp = await fetch('https://overpass-api.de/api/interpreter', {
+    method: 'POST',
+    body: 'data=' + encodeURIComponent(query)
+  });
+  if (!resp.ok) throw new Error('Overpass API error: ' + resp.status);
+  return resp.json();
+}
+
+// ─── Process raw OSM elements ────────────────────────────────────────────────
+function processElements(elements) {
+  const grouped = {}; // group by ~location to merge adjacent courts
+
+  elements.forEach(el => {
+    let lat = el.lat, lng = el.lon;
+    if (!lat && el.center) { lat = el.center.lat; lng = el.center.lon; }
+    if (!lat) return;
+
+    const t = el.tags || {};
+    const name = t.name || t['name:en'] || '';
+    const addr = [t['addr:street'], t['addr:city']].filter(Boolean).join(', ');
+    const lit = (t.lit || '').toLowerCase() === 'yes';
+    const indoor = (t.indoor || '').toLowerCase() === 'yes' || (t.sport_facility || '').includes('indoor');
+    const access = t.access || (t.fee === 'yes' ? 'private' : 'public');
+    const surface = t.surface || '';
+    const courts = parseInt(t.courts || t['tennis:courts'] || '1', 10) || 1;
+
+    // Round lat/lng to ~100m to cluster nearby entries
+    const key = `${Math.round(lat * 1000) / 1000},${Math.round(lng * 1000) / 1000}`;
+
+    if (grouped[key]) {
+      const g = grouped[key];
+      g.courts = Math.max(g.courts, courts);
+      if (!g.name && name) g.name = name;
+      if (!g.addr && addr) g.addr = addr;
+      if (lit) g.lit = true;
+      if (indoor) g.indoor = true;
+      if (surface && !g.surface) g.surface = surface;
+      if (access === 'private') g.access = 'private';
+    } else {
+      grouped[key] = { lat, lng, name, addr, lit, indoor, access, surface, courts, key };
+    }
+  });
+
+  return Object.values(grouped);
+}
+
+// ─── Distance helpers ─────────────────────────────────────────────────────────
+function haversine(lat1, lng1, lat2, lng2) {
+  const R = 3958.8; // miles
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R * 2 * Math.asin(Math.sqrt(a));
+}
+
+function updateDistances() {
+  allCourts.forEach(c => {
+    c.dist = (userLat != null) ? haversine(userLat, userLng, c.lat, c.lng) : null;
+  });
+}
+
+// ─── Geocode address → lat/lng via Nominatim ─────────────────────────────────
+async function geocodeAddress(q) {
+  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&countrycodes=us&limit=1`;
+  const r = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+  const data = await r.json();
+  if (!data.length) throw new Error('Address not found');
+  return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+}
+
+// ─── GPS ─────────────────────────────────────────────────────────────────────
+function useGPS() {
+  if (!navigator.geolocation) { alert('Geolocation not supported'); return; }
+  document.getElementById('status-msg').textContent = 'Getting location…';
+  navigator.geolocation.getCurrentPosition(pos => {
+    setUserLocation(pos.coords.latitude, pos.coords.longitude, 'Your location');
+  }, () => alert('Could not get location'));
+}
+
+function setUserLocation(lat, lng, label) {
+  userLat = lat; userLng = lng;
+  if (userMarker) userMarker.remove();
+  userMarker = L.circleMarker([lat, lng], { radius: 10, color: '#2ecc71', fillColor: '#2ecc71', fillOpacity: .5, weight: 2 })
+    .addTo(map).bindPopup(label).openPopup();
+  map.setView([lat, lng], 12);
+  updateDistances();
+  document.getElementById('sort-select').value = 'distance';
+  renderList();
+  document.getElementById('status-msg').textContent = `Sorted by distance from ${label}`;
+}
+
+// ─── Text search ──────────────────────────────────────────────────────────────
+async function doTextSearch() {
+  const q = document.getElementById('search-input').value.trim();
+  if (!q) { renderList(); return; }
+
+  // Try local name match first
+  const lower = q.toLowerCase();
+  const nameMatch = allCourts.filter(c =>
+    (c.name && c.name.toLowerCase().includes(lower)) ||
+    (c.addr && c.addr.toLowerCase().includes(lower))
+  );
+  if (nameMatch.length) {
+    filteredCourts = nameMatch;
+    renderList(true);
+    if (nameMatch.length === 1) openDetail(nameMatch[0]);
+    return;
+  }
+
+  // Otherwise geocode and find nearest
+  document.getElementById('status-msg').textContent = 'Geocoding address…';
+  try {
+    const { lat, lng } = await geocodeAddress(q);
+    setUserLocation(lat, lng, q);
+  } catch (e) {
+    document.getElementById('status-msg').textContent = 'Address not found';
+  }
+}
+
+document.getElementById('search-input').addEventListener('keydown', e => { if (e.key === 'Enter') doTextSearch(); });
+
+// ─── Filters ──────────────────────────────────────────────────────────────────
+function toggleFilter(f) {
+  activeFilters.has(f) ? activeFilters.delete(f) : activeFilters.add(f);
+  document.querySelector(`[data-filter="${f}"]`).classList.toggle('active');
+  renderList();
+}
+
+function clearAll() {
+  activeFilters.clear();
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('search-input').value = '';
+  filteredCourts = [...allCourts];
+  renderList();
+}
+
+function applyFilters() {
+  return allCourts.filter(c => {
+    if (activeFilters.has('lit') && !c.lit) return false;
+    if (activeFilters.has('public') && c.access === 'private') return false;
+    if (activeFilters.has('private') && c.access !== 'private') return false;
+    if (activeFilters.has('indoor') && !c.indoor) return false;
+    if (activeFilters.has('outdoor') && c.indoor) return false;
+    return true;
+  });
+}
+
+// ─── Render list & markers ────────────────────────────────────────────────────
+function renderList(useFiltered) {
+  const courts = useFiltered ? filteredCourts : applyFilters();
+  if (!useFiltered) filteredCourts = courts;
+
+  const sortVal = document.getElementById('sort-select').value;
+  const sorted = [...courts].sort((a, b) => {
+    if (sortVal === 'distance' && a.dist != null) return a.dist - b.dist;
+    if (sortVal === 'courts') return b.courts - a.courts;
+    return (a.name || 'ZZZZ').localeCompare(b.name || 'ZZZZ');
+  });
+
+  // Update stats
+  document.getElementById('stat-locations').textContent = courts.length;
+  document.getElementById('stat-courts').textContent = courts.reduce((s, c) => s + c.courts, 0);
+  document.getElementById('stat-lit').textContent = courts.filter(c => c.lit).length;
+  document.getElementById('stat-indoor').textContent = courts.filter(c => c.indoor).length;
+  document.getElementById('sidebar-header').textContent =
+    courts.length === allCourts.length ? `${courts.length} locations found` : `${courts.length} of ${allCourts.length} locations`;
+
+  // Markers
+  Object.values(markers).forEach(m => m.remove());
+  markers = {};
+  sorted.forEach((c, i) => {
+    const m = L.marker([c.lat, c.lng], { icon: makeIcon(c.lit, c.indoor) })
+      .addTo(map)
+      .on('click', () => { openDetail(c); highlightCard(c.key); });
+    markers[c.key] = m;
+  });
+
+  // List
+  const list = document.getElementById('court-list');
+  if (!sorted.length) { list.innerHTML = '<div class="no-results">No courts match your filters</div>'; return; }
+
+  list.innerHTML = sorted.map((c, i) => `
+    <div class="court-card" id="card-${c.key.replace(/[^a-z0-9]/gi,'_')}" onclick="cardClick('${c.key}')">
+      <div class="name">${c.name || 'Tennis Courts'}</div>
+      <div class="addr">${c.addr || formatCoords(c.lat, c.lng)}</div>
+      <div class="tags">
+        ${i === 0 && sortVal === 'distance' && c.dist != null ? '<span class="tag tag-nearest">Nearest</span>' : ''}
+        <span class="tag tag-courts">${c.courts} court${c.courts !== 1 ? 's' : ''}</span>
+        ${c.lit ? '<span class="tag tag-lit">🟢 Lit</span>' : '<span class="tag tag-unlit">❌ No lights</span>'}
+        ${c.indoor ? '<span class="tag tag-indoor">🏠 Indoor</span>' : ''}
+        ${c.access === 'private' ? '<span class="tag tag-private">Private</span>' : '<span class="tag tag-public">Public</span>'}
+      </div>
+      ${c.dist != null ? `<div class="dist">📍 ${c.dist.toFixed(1)} mi away</div>` : ''}
+    </div>
+  `).join('');
+}
+
+function cardClick(key) {
+  const c = filteredCourts.find(x => x.key === key);
+  if (c) { openDetail(c); highlightCard(key); map.setView([c.lat, c.lng], 15); }
+}
+
+function highlightCard(key) {
+  document.querySelectorAll('.court-card').forEach(el => el.classList.remove('selected'));
+  const id = 'card-' + key.replace(/[^a-z0-9]/gi,'_');
+  const el = document.getElementById(id);
+  if (el) { el.classList.add('selected'); el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+}
+
+function openDetail(c) {
+  document.getElementById('dp-name').textContent = c.name || 'Tennis Courts';
+  document.getElementById('dp-addr').textContent = c.addr || formatCoords(c.lat, c.lng);
+  document.getElementById('dp-courts').textContent = c.courts;
+  document.getElementById('dp-lit').textContent = c.lit ? '🟢 Yes' : '❌ No';
+  document.getElementById('dp-access').textContent = c.access === 'private' ? 'Private' : 'Public';
+  document.getElementById('dp-surface').textContent = c.surface ? capitalize(c.surface) : 'Unknown';
+  document.getElementById('dp-indoor').textContent = c.indoor ? 'Indoor' : 'Outdoor';
+  document.getElementById('dp-dist').textContent = c.dist != null ? c.dist.toFixed(1) + ' mi' : '—';
+  document.getElementById('detail-panel').classList.add('open');
+}
+
+function closeDetail() { document.getElementById('detail-panel').classList.remove('open'); }
+
+function formatCoords(lat, lng) { return `${lat.toFixed(4)}, ${lng.toFixed(4)}`; }
+function capitalize(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
+
+function refreshData() {
+  localStorage.removeItem(CACHE_KEY);
+  location.reload();
+}
+
+// ─── Boot ─────────────────────────────────────────────────────────────────────
+const CACHE_KEY = 'chicagoland_tennis_courts_v1';
+
+function loadFromCache() {
+  try {
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (cached) return JSON.parse(cached);
+  } catch(e) {}
+  return null;
+}
+
+function saveToCache(courts) {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify(courts)); } catch(e) {}
+}
+
+(async () => {
+  try {
+    // Try cache first — loads instantly on repeat visits
+    const cached = loadFromCache();
+    if (cached) {
+      document.getElementById('load-sub').textContent = 'Loading from saved snapshot…';
+      allCourts = cached;
+      filteredCourts = [...allCourts];
+      document.getElementById('status-msg').textContent = `${allCourts.length} locations (cached) · <a href="#" onclick="refreshData()" style="color:#2ecc71">Refresh</a>`;
+    } else {
+      const data = await fetchCourts();
+      document.getElementById('load-sub').textContent = `Processing ${data.elements.length} results…`;
+      allCourts = processElements(data.elements);
+      filteredCourts = [...allCourts];
+      saveToCache(allCourts);
+      document.getElementById('status-msg').textContent = `${allCourts.length} locations loaded & saved`;
+    }
+
+    // Global stats (full dataset)
+    document.getElementById('stat-locations').textContent = allCourts.length;
+    document.getElementById('stat-courts').textContent = allCourts.reduce((s, c) => s + c.courts, 0);
+    document.getElementById('stat-lit').textContent = allCourts.filter(c => c.lit).length;
+    document.getElementById('stat-indoor').textContent = allCourts.filter(c => c.indoor).length;
+
+    renderList();
+    document.getElementById('loading').style.display = 'none';
+  } catch (e) {
+    document.getElementById('load-sub').textContent = 'Error: ' + e.message;
+    document.getElementById('load-sub').style.color = '#e74c3c';
+    console.error(e);
+  }
+})();
+</script>
+</body>
+</html>
