@@ -115,6 +115,21 @@
 
   .no-results { padding: 30px 16px; text-align: center; color: #8a9bb0; font-size: 0.85rem; }
 
+  /* MEET IN MIDDLE */
+  .meet-panel { background: #162030; padding: 10px 20px; flex-direction: column; gap: 10px; border-bottom: 2px solid #3498db; display: none; }
+  .meet-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .meet-label { font-size: 0.8rem; font-weight: 700; min-width: 72px; white-space: nowrap; }
+  .meet-label-a { color: #3498db; }
+  .meet-label-b { color: #e67e22; }
+  .meet-input { flex: 1; min-width: 180px; padding: 8px 12px; border-radius: 6px; border: 1px solid #2d4060; background: #0f1923; color: #e8edf2; font-size: 0.85rem; outline: none; }
+  .meet-input:focus { border-color: #3498db; }
+  .meet-status { font-size: 0.75rem; color: #8a9bb0; }
+  .btn-meet { background: #2471a3; color: #fff; }
+  .btn-meet:hover { background: #1a5276; }
+  #meet-btn.active { background: #1a5276; color: #fff; border-color: #3498db; }
+  .tag-meet-best { background: #f1c40f; color: #0f1923; }
+  .meet-dist { font-size: 0.72rem; margin-top: 4px; display: flex; gap: 10px; flex-wrap: wrap; }
+
   @media (max-width: 700px) {
     header { padding: 8px 12px; gap: 10px; }
     header h1 { font-size: 1.1rem; }
@@ -184,8 +199,32 @@
     <option value="name">Sort: A–Z</option>
     <option value="courts">Sort: Most Courts</option>
     <option value="distance">Sort: Nearest</option>
+    <option value="meet" id="sort-meet-opt" style="display:none">Sort: Meet Distance</option>
   </select>
   <button class="btn-edit" id="edit-btn" onclick="toggleEditMode()">✏️ Edit Mode</button>
+  <button class="btn-outline" id="meet-btn" onclick="toggleMeetMode()">🤝 Meet in Middle</button>
+</div>
+
+<div class="meet-panel" id="meet-panel">
+  <div class="meet-row">
+    <span class="meet-label meet-label-a">🔵 Person A</span>
+    <input class="meet-input" type="text" id="meet-input-a" placeholder="Address, ZIP, or landmark…" onkeydown="if(event.key==='Enter')geocodeForMeet('a')" />
+    <button class="btn-meet" onclick="geocodeForMeet('a')">Go</button>
+    <button class="btn-outline" onclick="useGPSForMeet('a')">📍 GPS</button>
+    <span class="meet-status" id="meet-status-a"></span>
+  </div>
+  <div class="meet-row">
+    <span class="meet-label meet-label-b">🟠 Person B</span>
+    <input class="meet-input" type="text" id="meet-input-b" placeholder="Address, ZIP, or landmark…" onkeydown="if(event.key==='Enter')geocodeForMeet('b')" />
+    <button class="btn-meet" onclick="geocodeForMeet('b')">Go</button>
+    <button class="btn-outline" onclick="useGPSForMeet('b')">📍 GPS</button>
+    <span class="meet-status" id="meet-status-b"></span>
+  </div>
+  <div class="meet-row">
+    <button class="btn-green" id="find-meet-btn" onclick="findMeetingCourt()" disabled>🎾 Find Meeting Court</button>
+    <button class="btn-outline" onclick="clearMeet()">Clear</button>
+    <span id="meet-result-msg" style="font-size:0.78rem;color:#8a9bb0;"></span>
+  </div>
 </div>
 
 <div class="edit-banner" id="edit-banner">
@@ -584,6 +623,7 @@ function renderList(useFiltered) {
 
   const sortVal = document.getElementById('sort-select').value;
   const sorted = [...courts].sort((a, b) => {
+    if (sortVal === 'meet') return (a.distA + a.distB) - (b.distA + b.distB);
     if (sortVal === 'distance' && a.dist != null) return a.dist - b.dist;
     if (sortVal === 'courts') return b.courts - a.courts;
     return (a.name || 'ZZZZ').localeCompare(b.name || 'ZZZZ');
@@ -619,6 +659,7 @@ function renderList(useFiltered) {
       <div class="name">${c.name || 'Tennis Courts'}</div>
       <div class="addr">${displayAddr(c)}</div>
       <div class="tags">
+        ${meetActive && i === 0 ? '<span class="tag tag-meet-best">🏆 Best Pick</span>' : ''}
         ${i === 0 && sortVal === 'distance' && c.dist != null ? '<span class="tag tag-nearest">Nearest</span>' : ''}
         <span class="tag tag-courts">${c.courts} court${c.courts !== 1 ? 's' : ''}</span>
         ${c.lit ? '<span class="tag tag-lit">🟢 Lit</span>' : '<span class="tag tag-unlit">❌ No lights</span>'}
@@ -626,7 +667,9 @@ function renderList(useFiltered) {
         ${c.access === 'private' ? '<span class="tag tag-private">Private</span>' : '<span class="tag tag-public">Public</span>'}
         ${surfLabel ? `<span class="tag tag-surface">${surfLabel}</span>` : ''}
       </div>
-      ${c.dist != null ? `<div class="dist">📍 ${c.dist.toFixed(1)} mi away</div>` : ''}
+      ${meetActive && c.distA != null
+          ? `<div class="meet-dist"><span style="color:#3498db;">🔵 A: ${c.distA.toFixed(1)} mi</span><span style="color:#e67e22;">🟠 B: ${c.distB.toFixed(1)} mi</span><span style="color:#8a9bb0;">· ${(c.distA+c.distB).toFixed(1)} mi combined</span></div>`
+          : c.dist != null ? `<div class="dist">📍 ${c.dist.toFixed(1)} mi away</div>` : ''}
       ${editMode ? `
         <div class="edit-actions" style="display:flex;">
           <button class="btn-del" onclick="event.stopPropagation();deleteCourt('${c.key}')">🗑 Delete</button>
@@ -720,6 +763,131 @@ function refreshData() {
   if (!confirm('Re-fetch live data from OpenStreetMap? Your manual edits (deletions, court count fixes) will be kept.')) return;
   localStorage.removeItem(CACHE_KEY);
   location.reload();
+}
+
+// ─── Meet in Middle ──────────────────────────────────────────────────────────
+let meetMode = false, meetActive = false;
+let meetA = null, meetB = null;
+let meetMarkerA = null, meetMarkerB = null, meetMidMarker = null, meetLine = null;
+
+function toggleMeetMode() {
+  meetMode = !meetMode;
+  const btn = document.getElementById('meet-btn');
+  btn.classList.toggle('active', meetMode);
+  btn.textContent = meetMode ? '✕ Close Meet' : '🤝 Meet in Middle';
+  document.getElementById('meet-panel').style.display = meetMode ? 'flex' : 'none';
+  if (!meetMode) clearMeet();
+}
+
+async function geocodeForMeet(person) {
+  const q = document.getElementById(`meet-input-${person}`).value.trim();
+  if (!q) return;
+  const statusEl = document.getElementById(`meet-status-${person}`);
+  statusEl.textContent = 'Searching…'; statusEl.style.color = '#8a9bb0';
+  try {
+    const { lat, lng } = await geocodeAddress(q);
+    setMeetLocation(person, lat, lng, q);
+  } catch(e) {
+    statusEl.textContent = '✗ Not found'; statusEl.style.color = '#e74c3c';
+  }
+}
+
+function useGPSForMeet(person) {
+  if (!navigator.geolocation) { alert('Geolocation not supported'); return; }
+  const statusEl = document.getElementById(`meet-status-${person}`);
+  statusEl.textContent = 'Getting GPS…'; statusEl.style.color = '#8a9bb0';
+  navigator.geolocation.getCurrentPosition(pos => {
+    setMeetLocation(person, pos.coords.latitude, pos.coords.longitude, 'My location');
+  }, () => { statusEl.textContent = '✗ GPS failed'; statusEl.style.color = '#e74c3c'; });
+}
+
+function setMeetLocation(person, lat, lng, label) {
+  const isA = person === 'a';
+  const color = isA ? '#3498db' : '#e67e22';
+  const statusEl = document.getElementById(`meet-status-${person}`);
+  const short = label.length > 28 ? label.slice(0, 28) + '…' : label;
+  statusEl.textContent = `✓ ${short}`; statusEl.style.color = '#2ecc71';
+
+  if (isA) {
+    meetA = { lat, lng, label };
+    if (meetMarkerA) meetMarkerA.remove();
+    meetMarkerA = L.circleMarker([lat, lng], { radius: 11, color, fillColor: color, fillOpacity: .5, weight: 3 })
+      .addTo(map).bindPopup(`<b>Person A</b><br>${label}`);
+  } else {
+    meetB = { lat, lng, label };
+    if (meetMarkerB) meetMarkerB.remove();
+    meetMarkerB = L.circleMarker([lat, lng], { radius: 11, color, fillColor: color, fillOpacity: .5, weight: 3 })
+      .addTo(map).bindPopup(`<b>Person B</b><br>${label}`);
+  }
+
+  document.getElementById('find-meet-btn').disabled = !(meetA && meetB);
+  if (meetA && meetB) {
+    map.fitBounds([[meetA.lat, meetA.lng], [meetB.lat, meetB.lng]], { padding: [60, 60] });
+  } else {
+    map.setView([lat, lng], 12);
+  }
+}
+
+function findMeetingCourt() {
+  if (!meetA || !meetB) return;
+
+  const scored = allCourts.map(c => ({
+    ...c,
+    dist: null,
+    distA: haversine(meetA.lat, meetA.lng, c.lat, c.lng),
+    distB: haversine(meetB.lat, meetB.lng, c.lat, c.lng),
+  })).sort((a, b) => (a.distA + a.distB) - (b.distA + b.distB));
+
+  filteredCourts = scored;
+  meetActive = true;
+
+  // Dashed line A → B
+  if (meetLine) meetLine.remove();
+  meetLine = L.polyline([[meetA.lat, meetA.lng], [meetB.lat, meetB.lng]],
+    { color: '#8a9bb0', weight: 1.5, dashArray: '6,6', opacity: 0.7 }).addTo(map);
+
+  // Midpoint marker
+  const midLat = (meetA.lat + meetB.lat) / 2;
+  const midLng = (meetA.lng + meetB.lng) / 2;
+  if (meetMidMarker) meetMidMarker.remove();
+  meetMidMarker = L.circleMarker([midLat, midLng],
+    { radius: 6, color: '#2ecc71', fillColor: '#2ecc71', fillOpacity: 0.35, weight: 2 })
+    .addTo(map).bindPopup('<b>Midpoint</b>');
+
+  // Switch sort to meet distance
+  const sel = document.getElementById('sort-select');
+  document.getElementById('sort-meet-opt').style.display = '';
+  sel.value = 'meet';
+
+  const best = scored[0];
+  const msg = document.getElementById('meet-result-msg');
+  msg.style.color = '#2ecc71';
+  msg.textContent = best
+    ? `Best: ${best.name || 'Tennis Courts'} · ${(best.distA + best.distB).toFixed(1)} mi combined`
+    : 'No courts found';
+
+  renderList(true);
+
+  if (best) {
+    map.fitBounds([[meetA.lat, meetA.lng], [meetB.lat, meetB.lng], [best.lat, best.lng]], { padding: [50, 50] });
+  }
+}
+
+function clearMeet() {
+  meetA = meetB = null;
+  meetActive = false;
+  [meetMarkerA, meetMarkerB, meetMidMarker, meetLine].forEach(m => { if (m) m.remove(); });
+  meetMarkerA = meetMarkerB = meetMidMarker = meetLine = null;
+  ['a','b'].forEach(p => {
+    document.getElementById(`meet-status-${p}`).textContent = '';
+    document.getElementById(`meet-input-${p}`).value = '';
+  });
+  document.getElementById('meet-result-msg').textContent = '';
+  document.getElementById('find-meet-btn').disabled = true;
+  document.getElementById('sort-meet-opt').style.display = 'none';
+  document.getElementById('sort-select').value = 'name';
+  filteredCourts = [...allCourts];
+  renderList(true);
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
